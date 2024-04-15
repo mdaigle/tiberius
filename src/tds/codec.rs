@@ -13,7 +13,6 @@ mod rpc_request;
 mod token;
 mod type_info;
 
-pub use batch_request::*;
 pub use bulk_load::*;
 use bytes::BytesMut;
 pub use column_data::*;
@@ -21,7 +20,6 @@ pub use decode::*;
 pub(crate) use encode::*;
 use futures_util::stream::{Stream, TryStreamExt};
 pub use header::*;
-pub(crate) use iterator_ext::*;
 pub use login::*;
 pub use packet::*;
 pub use pre_login::*;
