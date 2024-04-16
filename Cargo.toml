@@ -191,7 +191,7 @@ all = [
     "bigdecimal",
     "native-tls",
 ]
-default = ["tds73", "winauth", "native-tls"]
+default = ["tds73", "winauth", "native-tls", "sql-browser-tokio"]
 tds73 = []
 docs = []
 sql-browser-async-std = ["async-std"]

@@ -1,6 +1,7 @@
 mod auth;
 mod config;
 mod connection;
+mod tokio_sync_client;
 
 mod tls;
 #[cfg(any(
@@ -13,6 +14,7 @@ mod tls_stream;
 pub use auth::*;
 pub use config::*;
 pub(crate) use connection::*;
+pub use tokio_sync_client::*;
 
 use crate::{
     tds::{
@@ -66,9 +68,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Client<S> {
     /// tcp connection
     ///
     /// [`Config`]: struct.Config.html
-    pub async fn connect(config: Config, tcp_stream: S) -> crate::Result<Client<S>> {
+    pub async fn connect(config: Config, tcp: S) -> crate::Result<Client<S>> {
         Ok(Client {
-            connection: Connection::connect(config, tcp_stream).await?,
+            connection: Connection::connect(config, tcp).await?,
         })
     }
 
