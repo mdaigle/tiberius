@@ -1,8 +1,3 @@
-#[cfg(any(
-    feature = "rustls",
-    feature = "native-tls",
-    feature = "vendored-openssl"
-))]
 use crate::client::{tls::TlsPreloginWrapper, tls_stream::create_tls_stream};
 use crate::{
     client::{tls::MaybeTlsStream, AuthMethod, Config},
@@ -18,27 +13,16 @@ use crate::{
 };
 use asynchronous_codec::Framed;
 use bytes::BytesMut;
-#[cfg(any(windows, feature = "integrated-auth-gssapi"))]
 use codec::TokenSspi;
 use futures_util::io::{AsyncRead, AsyncWrite};
 use futures_util::ready;
 use futures_util::sink::SinkExt;
 use futures_util::stream::{Stream, TryStream, TryStreamExt};
-#[cfg(all(unix, feature = "integrated-auth-gssapi"))]
-use libgssapi::{
-    context::{ClientCtx, CtxFlags},
-    credential::{Cred, CredUsage},
-    name::Name,
-    oid::{OidSet, GSS_MECH_KRB5, GSS_NT_KRB5_PRINCIPAL},
-};
 use pretty_hex::*;
-#[cfg(all(unix, feature = "integrated-auth-gssapi"))]
 use std::ops::Deref;
 use std::{cmp, fmt::Debug, io, pin::Pin, task};
 use task::Poll;
 use tracing::{event, Level};
-#[cfg(all(windows, feature = "winauth"))]
-use winauth::{windows::NtlmSspiBuilder, NextBytes};
 
 /// A `Connection` is an abstraction between the [`Client`] and the server. It
 /// can be used as a `Stream` to fetch [`Packet`]s from and to `send` packets
@@ -120,17 +104,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Connection<S> {
         TokenStream::new(self).flush_done().await
     }
 
-    #[cfg(any(windows, feature = "integrated-auth-gssapi"))]
-    /// Flush the incoming token stream until receiving `SSPI` token.
-    async fn flush_sspi(&mut self) -> crate::Result<TokenSspi> {
-        TokenStream::new(self).flush_sspi().await
-    }
-
-    #[cfg(any(
-        feature = "rustls",
-        feature = "native-tls",
-        feature = "vendored-openssl"
-    ))]
     fn post_login_encryption(mut self, encryption: EncryptionLevel) -> Self {
         if let EncryptionLevel::Off = encryption {
             event!(
@@ -143,15 +116,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Connection<S> {
             self.transport = Framed::new(MaybeTlsStream::Raw(tcp), PacketCodec);
         }
 
-        self
-    }
-
-    #[cfg(not(any(
-        feature = "rustls",
-        feature = "native-tls",
-        feature = "vendored-openssl"
-    )))]
-    fn post_login_encryption(self, _: EncryptionLevel) -> Self {
         self
     }
 
@@ -311,103 +275,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Connection<S> {
         login_message.readonly(readonly);
 
         match auth {
-            #[cfg(all(windows, feature = "winauth"))]
-            AuthMethod::Integrated => {
-                let mut client = NtlmSspiBuilder::new()
-                    .target_spn(self.context.spn())
-                    .build()?;
-
-                login_message.integrated_security(client.next_bytes(None)?);
-
-                let id = self.context.next_packet_id();
-                self.send(PacketHeader::login(id), login_message).await?;
-
-                self = self.post_login_encryption(encryption);
-
-                let sspi_bytes = self.flush_sspi().await?;
-
-                match client.next_bytes(Some(sspi_bytes.as_ref()))? {
-                    Some(sspi_response) => {
-                        event!(Level::TRACE, sspi_response_len = sspi_response.len());
-
-                        let id = self.context.next_packet_id();
-                        let header = PacketHeader::login(id);
-
-                        let token = TokenSspi::new(sspi_response);
-                        self.send(header, token).await?;
-                    }
-                    None => unreachable!(),
-                }
-            }
-            #[cfg(all(unix, feature = "integrated-auth-gssapi"))]
-            AuthMethod::Integrated => {
-                let mut s = OidSet::new()?;
-                s.add(&GSS_MECH_KRB5)?;
-
-                let client_cred = Cred::acquire(None, None, CredUsage::Initiate, Some(&s))?;
-
-                let ctx = ClientCtx::new(
-                    client_cred,
-                    Name::new(self.context.spn().as_bytes(), Some(&GSS_NT_KRB5_PRINCIPAL))?,
-                    CtxFlags::GSS_C_MUTUAL_FLAG | CtxFlags::GSS_C_SEQUENCE_FLAG,
-                    None,
-                );
-
-                let init_token = ctx.step(None)?;
-
-                login_message.integrated_security(Some(Vec::from(init_token.unwrap().deref())));
-
-                let id = self.context.next_packet_id();
-                self.send(PacketHeader::login(id), login_message).await?;
-
-                self = self.post_login_encryption(encryption);
-
-                let auth_bytes = self.flush_sspi().await?;
-
-                let next_token = match ctx.step(Some(auth_bytes.as_ref()))? {
-                    Some(response) => {
-                        event!(Level::TRACE, response_len = response.len());
-                        TokenSspi::new(Vec::from(response.deref()))
-                    }
-                    None => {
-                        event!(Level::TRACE, response_len = 0);
-                        TokenSspi::new(Vec::new())
-                    }
-                };
-
-                let id = self.context.next_packet_id();
-                let header = PacketHeader::login(id);
-
-                self.send(header, next_token).await?;
-            }
-            #[cfg(all(windows, feature = "winauth"))]
-            AuthMethod::Windows(auth) => {
-                let spn = self.context.spn().to_string();
-                let builder = winauth::NtlmV2ClientBuilder::new().target_spn(spn);
-                let mut client = builder.build(auth.domain, auth.user, auth.password);
-
-                login_message.integrated_security(client.next_bytes(None)?);
-
-                let id = self.context.next_packet_id();
-                self.send(PacketHeader::login(id), login_message).await?;
-
-                self = self.post_login_encryption(encryption);
-
-                let sspi_bytes = self.flush_sspi().await?;
-
-                match client.next_bytes(Some(sspi_bytes.as_ref()))? {
-                    Some(sspi_response) => {
-                        event!(Level::TRACE, sspi_response_len = sspi_response.len());
-
-                        let id = self.context.next_packet_id();
-                        let header = PacketHeader::login(id);
-
-                        let token = TokenSspi::new(sspi_response);
-                        self.send(header, token).await?;
-                    }
-                    None => unreachable!(),
-                }
-            }
             AuthMethod::None => {
                 let id = self.context.next_packet_id();
                 self.send(PacketHeader::login(id), login_message).await?;
@@ -433,11 +300,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Connection<S> {
     }
 
     /// Implements the TLS handshake with the SQL Server.
-    #[cfg(any(
-        feature = "rustls",
-        feature = "native-tls",
-        feature = "vendored-openssl"
-    ))]
     async fn tls_handshake(
         self,
         config: &Config,
@@ -475,21 +337,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Connection<S> {
 
             Ok(self)
         }
-    }
-
-    /// Implements the TLS handshake with the SQL Server.
-    #[cfg(not(any(
-        feature = "rustls",
-        feature = "native-tls",
-        feature = "vendored-openssl"
-    )))]
-    async fn tls_handshake(self, _: &Config, _: EncryptionLevel) -> crate::Result<Self> {
-        event!(
-            Level::WARN,
-            "TLS encryption is not enabled. All traffic including the login credentials are not encrypted."
-        );
-
-        Ok(self)
     }
 
     pub(crate) async fn close(mut self) -> crate::Result<()> {

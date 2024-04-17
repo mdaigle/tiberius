@@ -4,11 +4,6 @@ mod connection;
 mod tokio_sync_client;
 
 mod tls;
-#[cfg(any(
-    feature = "rustls",
-    feature = "native-tls",
-    feature = "vendored-openssl"
-))]
 mod tls_stream;
 
 pub use auth::*;

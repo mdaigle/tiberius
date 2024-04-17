@@ -76,11 +76,6 @@ mod tests {
     use super::*;
     use crate::client::AuthMethod;
 
-    #[cfg(any(
-        feature = "rustls",
-        feature = "native-tls",
-        feature = "vendored-openssl"
-    ))]
     use crate::EncryptionLevel;
 
     #[test]
@@ -334,60 +329,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
-    fn parsing_sspi_authentication() -> crate::Result<()> {
-        let test_str = "IntegratedSecurity=SSPI;";
-        let ado: AdoNetConfig = test_str.parse()?;
-
-        assert_eq!(AuthMethod::Integrated, ado.authentication()?);
-
-        let test_str = "Integrated Security=SSPI;";
-        let ado: AdoNetConfig = test_str.parse()?;
-
-        assert_eq!(AuthMethod::Integrated, ado.authentication()?);
-
-        Ok(())
-    }
-
-    #[test]
-    #[cfg(all(feature = "integrated-auth-gssapi", unix))]
-    fn parsing_sspi_authentication() -> crate::Result<()> {
-        let test_str = "IntegratedSecurity=true;";
-        let ado: AdoNetConfig = test_str.parse()?;
-
-        assert_eq!(AuthMethod::Integrated, ado.authentication()?);
-
-        let test_str = "Integrated Security=true;";
-        let ado: AdoNetConfig = test_str.parse()?;
-
-        assert_eq!(AuthMethod::Integrated, ado.authentication()?);
-
-        Ok(())
-    }
-
-    #[test]
-    #[cfg(windows)]
-    fn parsing_windows_authentication() -> crate::Result<()> {
-        let test_str = "uid=Musti;pwd=Naukio; IntegratedSecurity=SSPI;";
-        let ado: AdoNetConfig = test_str.parse()?;
-
-        assert_eq!(
-            AuthMethod::windows("Musti", "Naukio"),
-            ado.authentication()?
-        );
-
-        let test_str = "uid=Musti;pwd=Naukio; Integrated Security=SSPI;";
-        let ado: AdoNetConfig = test_str.parse()?;
-
-        assert_eq!(
-            AuthMethod::windows("Musti", "Naukio"),
-            ado.authentication()?
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn parsing_database() -> crate::Result<()> {
         let test_str = "database=Cats;";
         let ado: AdoNetConfig = test_str.parse()?;
@@ -411,11 +352,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(
-        feature = "rustls",
-        feature = "native-tls",
-        feature = "vendored-openssl"
-    ))]
     fn encryption_parsing_on() -> crate::Result<()> {
         let test_str = "encrypt=true";
         let ado: AdoNetConfig = test_str.parse()?;
@@ -426,11 +362,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(
-        feature = "rustls",
-        feature = "native-tls",
-        feature = "vendored-openssl"
-    ))]
     fn encryption_parsing_off() -> crate::Result<()> {
         let test_str = "encrypt=false";
         let ado: AdoNetConfig = test_str.parse()?;
@@ -441,11 +372,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(
-        feature = "rustls",
-        feature = "native-tls",
-        feature = "vendored-openssl"
-    ))]
     fn encryption_parsing_plaintext() -> crate::Result<()> {
         let test_str = "encrypt=DANGER_PLAINTEXT";
         let ado: AdoNetConfig = test_str.parse()?;
@@ -456,11 +382,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(
-        feature = "rustls",
-        feature = "native-tls",
-        feature = "vendored-openssl"
-    ))]
     fn encryption_parsing_missing() -> crate::Result<()> {
         let test_str = "";
         let ado: AdoNetConfig = test_str.parse()?;

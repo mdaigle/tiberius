@@ -1,4 +1,5 @@
-use tokio::{net::TcpStream, runtime::{Builder, Runtime}};
+use tokio::net::TcpStream;
+use tokio::runtime::{Builder, Runtime};
 use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 
 use crate::{
