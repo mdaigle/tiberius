@@ -13,8 +13,8 @@ fn main() -> anyhow::Result<()> {
 
     let mut client = TokioSyncClient::new(config);
 
-    let stream = client.query("SELECT * from people", &[]);
-    let row = stream.into_row().await?.unwrap();
+    let stream = client.query("SELECT * from people", &[]).unwrap();
+    let row = stream.into_row().unwrap().unwrap();
 
     println!("{:?}", row);
     assert_eq!(Some("Malcolm"), row.get(0));
